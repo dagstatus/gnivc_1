@@ -4,6 +4,7 @@ from gensim.utils import simple_preprocess
 import nltk
 from nltk.corpus import stopwords
 from pymorphy2 import MorphAnalyzer
+from nltk.tokenize import word_tokenize
 import re
 import cupy as cp
 import spacy
@@ -12,7 +13,8 @@ import spacy
 morph = MorphAnalyzer()
 
 # Загружаем список стоп-слов для русского языка
-nltk.download('stopwords')
+# nltk.download('stopwords')
+nltk.download('punkt')
 stop_words = set(stopwords.words('russian'))
 
 
@@ -38,13 +40,18 @@ stop_words = set(stopwords.words('russian'))
 #     return text
 #
 
-nlp = spacy.load('ru_core_news_sm')
-def preprocess_text(text):
-    doc = nlp(text)
-    lemmas = [token.lemma_.lower() for token in doc if not token.is_stop and token.lemma_.isalpha()]
-    lemmas_arr = cp.array(lemmas)
+# nlp = spacy.load("ru_core_news_sm")
+# def preprocess_text(text):
+#     doc = nlp(text)
+#     lemmas = [token.lemma_.lower() for token in doc if not token.is_stop and token.lemma_.isalpha()]
+#     lemmas_arr = cp.array(lemmas)
+#
+#     return lemmas_arr
 
-    return lemmas_arr
+def preprocess_text(text):
+    tokens = word_tokenize(text.lower())
+    tokens = [token for token in tokens if token.isalpha() and token not in stop_words]
+    return ' '.join(tokens)
 
 
 # Создаем первый датафрейм
@@ -70,7 +77,7 @@ tokens = [simple_preprocess(text) for text in texts]
 # Создаем модель Word2Vec
 print("Начинаем обучение модели")
 model = Word2Vec(tokens, window=5, min_count=1, workers=4)
-model.wv.save_word2vec_format('model.bin', binary=True)
+# model.wv.save_word2vec_format('model.bin', binary=True)
 
 #load model
 # model = Word2Vec.load('model.bin')
@@ -80,15 +87,18 @@ print("Начинаем перебор")
 similarities = []
 for text2 in df2['text']:
     text2_tokens = simple_preprocess(text2)
-    text2_vec = sum([model.wv[token] for token in text2_tokens]) / len(text2_tokens)
-    max_similarity = 0
-    for text1 in df1['text']:
-        text1_tokens = simple_preprocess(text1)
-        text1_vec = sum([model.wv[token] for token in text1_tokens]) / len(text1_tokens)
-        similarity = model.wv.cosine_similarities(text2_vec, [text1_vec])[0]
-        if similarity > max_similarity:
-            max_similarity = similarity
-            most_similar_text = text1
+    if len(text2_tokens) != 0:
+        text2_vec = sum([model.wv[token] for token in text2_tokens]) / len(text2_tokens)
+        max_similarity = 0
+        for text1 in df1['text']:
+            text1_tokens = simple_preprocess(text1)
+            text1_vec = sum([model.wv[token] for token in text1_tokens]) / len(text1_tokens)
+            similarity = model.wv.cosine_similarities(text2_vec, [text1_vec])[0]
+            if similarity > max_similarity:
+                max_similarity = similarity
+                most_similar_text = text1
+    else:
+        max_similarity = 0
     similarities.append(max_similarity)
     df2.loc[df2['text'] == text2, 'most_similar_text'] = most_similar_text
 
