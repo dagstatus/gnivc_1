@@ -5,35 +5,46 @@ import nltk
 from nltk.corpus import stopwords
 from pymorphy2 import MorphAnalyzer
 import re
+import cupy as cp
+import spacy
 
 # Инициализируем объект лемматизатора
 morph = MorphAnalyzer()
 
 # Загружаем список стоп-слов для русского языка
-# nltk.download('stopwords')
+nltk.download('stopwords')
 stop_words = set(stopwords.words('russian'))
 
 
+# def preprocess_text(text):
+#     # Приводим текст к нижнему регистру
+#     text = text.lower()
+#
+#     # Удаляем все символы кроме букв и цифр
+#     text = re.sub(r'[^a-zA-Zа-яА-Я0-9]', ' ', text)
+#
+#     # Разбиваем текст на слова
+#     words = text.split()
+#
+#     # Лемматизируем каждое слово
+#     words = [morph.parse(w)[0].normal_form for w in words]
+#
+#     # Удаляем стоп-слова
+#     words = [w for w in words if not w in stop_words]
+#
+#     # Склеиваем слова обратно в текст
+#     text = ' '.join(words)
+#
+#     return text
+#
+
+nlp = spacy.load('ru_core_news_sm')
 def preprocess_text(text):
-    # Приводим текст к нижнему регистру
-    text = text.lower()
+    doc = nlp(text)
+    lemmas = [token.lemma_.lower() for token in doc if not token.is_stop and token.lemma_.isalpha()]
+    lemmas_arr = cp.array(lemmas)
 
-    # Удаляем все символы кроме букв и цифр
-    text = re.sub(r'[^a-zA-Zа-яА-Я0-9]', ' ', text)
-
-    # Разбиваем текст на слова
-    words = text.split()
-
-    # Лемматизируем каждое слово
-    words = [morph.parse(w)[0].normal_form for w in words]
-
-    # Удаляем стоп-слова
-    words = [w for w in words if not w in stop_words]
-
-    # Склеиваем слова обратно в текст
-    text = ' '.join(words)
-
-    return text
+    return lemmas_arr
 
 
 # Создаем первый датафрейм
@@ -59,6 +70,10 @@ tokens = [simple_preprocess(text) for text in texts]
 # Создаем модель Word2Vec
 print("Начинаем обучение модели")
 model = Word2Vec(tokens, window=5, min_count=1, workers=4)
+model.wv.save_word2vec_format('model.bin', binary=True)
+
+#load model
+# model = Word2Vec.load('model.bin')
 
 print("Начинаем перебор")
 # Находим наиболее похожий текст из df1 для каждой строки df2
